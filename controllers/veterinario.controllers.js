@@ -18,11 +18,11 @@ export const registrar = async (req, res) => {
 
     try {
         // Datos de creacion del usuario
-        const veterinario = new Veterinario({ nombre: nombre, email, password }); // Instancia del esquema del veterinario
+        const veterinario = new Veterinario({ nombre, email, password }); // Instancia del esquema del veterinario
         const newVeterinario = await veterinario.save(); // Guardar el veterinario en base de datos
 
         // Datos de envio del email del usuario para su posterior envio
-        emailRegistro({
+        await emailRegistro({
             nombre,
             email,
             token: newVeterinario.token,
@@ -52,12 +52,10 @@ export const confirmar = async (req, res) => {
 
     // Si no hay usuario
     if (!usuarioConfirmar) {
-        console.log('No se encontro el usuario');
         return res.status(404).json({ msg: 'Usuario no encontrado', error: true });
     }
 
     try {
-        console.log('Dentro del try catch');
         // Cambiamos los valores del usuario
         usuarioConfirmar.token = null;
         usuarioConfirmar.confirmado = true;
@@ -65,7 +63,6 @@ export const confirmar = async (req, res) => {
         // Guardamos los datos
         await usuarioConfirmar.save();
 
-        console.log('Se envio la respuesta');
         // Retornamos la respuesta
         return res.status(200).json({ msg: 'Usuario confirmado correctamente' });
     } catch (error) {
@@ -74,29 +71,39 @@ export const confirmar = async (req, res) => {
 };
 
 export const autenticar = async (req, res) => {
-    const { email, password } = req.body;
+    try {
+        const { email, password } = req.body;
 
-    const usuario = await Veterinario.findOne({ email });
+        const usuario = await Veterinario.findOne({ email });
 
-    // Confirmar si el usuario no
-    if (!usuario) {
-        return res.status(403).json({ error: true, msg: 'No existe el usuario' });
-    }
+        // Confirmar si el usuario no
+        if (!usuario) {
+            return res.status(403).json({ error: true, msg: 'No existe el usuario' });
+        }
 
-    // Confirmar si el usuario ha sido confirmado
-    if (!usuario.confirmado) {
-        return res.status(403).json({ error: true, msg: 'Cuenta no confirmada' });
-    }
+        // Confirmar si el usuario ha sido confirmado
+        if (!usuario.confirmado) {
+            return res.status(403).json({ error: true, msg: 'Cuenta no confirmada' });
+        }
 
-    const userIsValid = await usuario.comprobarPassword(password);
+        // Comprobar contraseña
+        const userIsValid = await usuario.comprobarPassword(password);
 
-    if (userIsValid) {
-        return res.status(200).json({
-            msg: 'Usuario logeado correctamente',
-            token: generarJWT(usuario.id),
-        });
-    } else {
-        return res.status(403).json({ error: true, msg: 'Contraseña incorrecta' });
+        if (userIsValid) {
+            const token = generarJWT(usuario._id);
+
+            const user = { _id: usuario._id, nombre: usuario.nombre, email: usuario.email, token, confirmado: usuario.confirmado };
+
+            return res.status(200).json({
+                msg: 'Usuario logeado correctamente',
+                user,
+            });
+        } else {
+            return res.status(403).json({ error: true, msg: 'Contraseña incorrecta' });
+        }
+    } catch (error) {
+        console.log(error);
+        return res.status(403).json({ error: true, msg: 'Ha ocurrido un error interno' });
     }
 };
 
@@ -162,6 +169,7 @@ export const nuevoPassword = async (req, res) => {
         veterinario.password = password;
         // Guardamos el veterinari
         await veterinario.save();
+        //
         res.status(200).json({ error: true, msg: 'Contraseña cambiada con exito' });
     } catch (error) {
         res.status(403).json({ error: true, msg: 'Error inesperado' });
